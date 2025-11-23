@@ -41,7 +41,12 @@ function App() {
 
     callHandledRef.current = true;
     setActiveCall(call);
-    setCallStatus("ringing");
+    // Set status based on call state
+    if (call.status === "open" || call.status === "connected") {
+      setCallStatus("connected");
+    } else {
+      setCallStatus("ringing");
+    }
 
     // Check if call has 'on' method, if not, try alternative event handling
     if (typeof call.on === 'function') {
@@ -183,16 +188,49 @@ function App() {
         });
 
         dev.on("incoming", (call) => {
-          console.log("Incoming call received:", call);
+          console.log("=".repeat(50));
+          console.log("📞 INCOMING CALL RECEIVED");
+          console.log("=".repeat(50));
+          console.log("Call object:", call);
+          console.log("Call parameters:", call.parameters);
+          console.log("Call from:", call.from);
+
           // Get caller ID if available
-          const callerId = call.parameters?.From || call.from || "Unknown";
+          const callerId = call.parameters?.From || call.from || call.parameters?.Caller || "Unknown";
+          console.log("Caller ID:", callerId);
+
           setIncomingCallerId(callerId);
           setIncomingCall(call);
           setCallStatus("incoming");
 
+          // Set up call event listeners before accepting
+          call.on("accept", () => {
+            console.log("✅ Call accepted event fired");
+            setCallStatus("connected");
+          });
+
+          call.on("disconnect", () => {
+            console.log("📴 Call disconnected event fired");
+            callHandledRef.current = false;
+            setTimeout(() => {
+              setActiveCall(null);
+              setCallStatus("");
+            }, 0);
+          });
+
+          call.on("error", (error) => {
+            console.error("❌ Call error:", error);
+            callHandledRef.current = false;
+            setTimeout(() => {
+              setActiveCall(null);
+              setCallStatus("");
+            }, 0);
+            alert("Call error: " + error.message);
+          });
+
           // Auto-reject after 30 seconds if not answered
           const timeout = setTimeout(() => {
-            console.log("Incoming call timeout, rejecting...");
+            console.log("⏱️ Incoming call timeout (30s), rejecting...");
             try {
               call.reject();
             } catch (error) {
@@ -205,6 +243,7 @@ function App() {
 
           // Store timeout in call object for cleanup
           call._timeout = timeout;
+          console.log("=".repeat(50));
         });
 
         // Listen for outgoing call events on the device
@@ -299,16 +338,60 @@ function App() {
 
   // Accept incoming call
   const acceptIncomingCall = () => {
-    if (incomingCall) {
-      console.log("Accepting incoming call");
-      // Clear timeout if exists
-      if (incomingCall._timeout) {
-        clearTimeout(incomingCall._timeout);
-      }
-      handleCall(incomingCall);
+    if (!incomingCall) {
+      console.warn("⚠️ No incoming call to accept");
+      return;
+    }
+
+    if (!device || !deviceReady) {
+      console.error("❌ Device not ready, cannot accept call");
+      alert("Device is not ready. Please wait for device initialization.");
+      return;
+    }
+
+    console.log("=".repeat(50));
+    console.log("✅ ACCEPTING INCOMING CALL");
+    console.log("=".repeat(50));
+    console.log("Call object:", incomingCall);
+    console.log("Call status:", incomingCall.status);
+    console.log("Device ready:", deviceReady);
+
+    // Clear timeout if exists
+    if (incomingCall._timeout) {
+      clearTimeout(incomingCall._timeout);
+      console.log("⏱️ Cleared auto-reject timeout");
+    }
+
+    try {
+      // Accept the call first
+      console.log("📞 Calling accept() on call object...");
       incomingCall.accept();
+      console.log("✅ Call accept() called successfully");
+
+      // Small delay to ensure accept() completes before handling
+      setTimeout(() => {
+        // Then handle the call (set up event listeners)
+        console.log("📋 Setting up call handlers...");
+        handleCall(incomingCall);
+
+        // Clear incoming call state
+        setIncomingCall(null);
+        setIncomingCallerId("");
+        console.log("✅ Incoming call accepted and handled");
+        console.log("=".repeat(50));
+      }, 100);
+    } catch (error) {
+      console.error("❌ Error accepting call:", error);
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      alert("Failed to accept call: " + error.message);
+      // Clean up on error
       setIncomingCall(null);
       setIncomingCallerId("");
+      setCallStatus("");
     }
   };
 

@@ -181,25 +181,42 @@ app.post("/call", async (req, res) => {
 app.post("/call-status", (req, res) => {
     const twiml = new VoiceResponse();
     const dialCallStatus = req.body.DialCallStatus;
+    const dialCallDuration = req.body.DialCallDuration;
+    const dialCallSid = req.body.DialCallSid;
     const department = req.query.department || "support";
 
     console.log("=".repeat(50));
     console.log("📞 CALL STATUS UPDATE");
     console.log("=".repeat(50));
     console.log("Dial Call Status:", dialCallStatus);
+    console.log("Dial Call Duration:", dialCallDuration);
+    console.log("Dial Call SID:", dialCallSid);
     console.log("Department:", department);
     console.log("Request body:", JSON.stringify(req.body, null, 2));
     console.log("=".repeat(50));
 
     if (dialCallStatus === "completed" || dialCallStatus === "answered") {
-        // Call was answered, nothing to do
-        twiml.say("Thank you for calling. Goodbye.");
-    } else if (dialCallStatus === "no-answer" || dialCallStatus === "busy") {
-        twiml.say("Sorry, the agent is not available at the moment. Please try again later.");
-    } else if (dialCallStatus === "failed" || dialCallStatus === "canceled") {
-        twiml.say("The call could not be completed. Please try again later.");
+        // Call was answered and completed
+        if (dialCallDuration && parseInt(dialCallDuration) > 0) {
+            twiml.say(`Thank you for calling. The call lasted ${dialCallDuration} seconds. Goodbye.`);
+        } else {
+            twiml.say("Thank you for calling. Goodbye.");
+        }
+    } else if (dialCallStatus === "no-answer") {
+        twiml.say("Sorry, the agent did not answer. Please make sure the app is open and try again later.");
+        console.log("⚠️ Client did not answer the call");
+    } else if (dialCallStatus === "busy") {
+        twiml.say("Sorry, the agent is busy at the moment. Please try again later.");
+        console.log("⚠️ Client is busy");
+    } else if (dialCallStatus === "failed") {
+        twiml.say("The call could not be completed. Please make sure the app is open and registered, then try again.");
+        console.log("❌ Call failed - client may not be registered");
+    } else if (dialCallStatus === "canceled") {
+        twiml.say("The call was canceled. Please try again.");
+        console.log("⚠️ Call was canceled");
     } else {
         twiml.say("The call has ended. Thank you for calling.");
+        console.log("ℹ️ Call ended with status:", dialCallStatus);
     }
 
     res.type("text/xml");
